@@ -58,12 +58,19 @@ counters do O(V + E) dependency bookkeeping **across one successful traversal**;
 that does not include instrument scheduling or database I/O. Simplicity here costs
 repeated work, rather than offering the same efficiency.
 
+## Going further: choosing FAIL
+
+I chose FAIL because an explicit error and retryability signal make bounded
+recovery testable. DROP leaves the physical outcome uncertain: an idle instrument
+cannot establish whether a particular step succeeded or is safe to repeat.
+Reconciling that uncertainty was outside the scope of this extension.
+
 ## Operational boundaries
 
 An acknowledgement timeout fails the run but retains the instrument reservation
 until a result arrives: acceptance is unknown. A missing completion result leaves
 the task in flight indefinitely with its reservation. Neither case triggers blind
-replay; an unknown physical outcome needs confirmation before recovery.
+replay.
 
 The main weakness is a process crash between database claim and command delivery.
 The scheduler operates in one process and does not resume stored runs on restart;
@@ -83,4 +90,7 @@ commands at the driver.
 - As a visual thinker, the GitHub Actions-inspired visualiser made the flow click
   and was worth the time.
 - Docker and real PostgreSQL removed uncertainty about infrastructure scope.
-- My only suggested change: include a basic visualisation in the starter pack.
+- Structure the deliverables as **Task 1 — Scheduler; Task 2 — Choose one: FAIL
+  or DROP; Task 3 — Documentation**. This makes the extension requirement explicit
+  without separate “required” labels.
+- Include a basic visualisation in the starter pack.
