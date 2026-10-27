@@ -1,73 +1,69 @@
-# Study and implementation notes
+# Implementation notes
 
-Time spent: under two hours on the assessment, plus approximately 30 minutes on
-the optional visualisation. AI assisted the study, design, implementation and
-verification.
+## Executive summary
 
-## Study first
+Built a scheduler that shares instruments safely, runs independent tasks
+concurrently, and handles failures with bounded retries and durable attempt history.
 
-I traced the API, store, scheduler, bus and drivers first. Acceptance is separate from completion; dependencies are
-run-local, while instruments are shared. Baseline checks confirmed the stub sent
-no commands: one task was ready and six were waiting.
+**Time:** under two hours, plus approximately 30 minutes for the visualiser.
+AI assisted study, design, implementation and verification.
 
-![Baseline workflow: one ready task, six waiting](docs/design/starter-workflow-observation.png)
+## Mental model
 
-*Columns show dependency depth, not time. The optional
-[observer](tools/queue-viewer/README.md) runs separately.*
+Each experiment is a dependency graph; all experiments share three instruments,
+each with one execution slot. A command being accepted is not completion. Only a
+successful result unlocks dependent tasks.
 
-## Decomposition and decisions
+I traced the existing code first. The baseline sent no commands: one task was
+ready and six were waiting.
 
-**Start → scan → claim task and instrument → dispatch → record result → release
-instrument → rescan.**
+<details>
+<summary>Baseline observation</summary>
 
-![Early scheduler decomposition](docs/design/initial-scheduler-sketch.png)
+![Baseline: one ready task, six waiting](docs/design/starter-workflow-observation.png)
 
-*Early proposal: dependency counters were replaced by scanning.*
+Columns represent dependency depth, not scheduled time.
 
-- Scanning avoids maintaining counters: O(V + E) per run scanned. Each event
-  scans all active runs.
-- One lock serialises simultaneous results and scheduling decisions across runs,
-  preventing duplicate claims. It covers database updates and acknowledgements;
-  slow acknowledgements delay scheduling, but physical execution overlaps.
-- Only successful completion unlocks dependants. Busy refusals release the claim
-  and trigger another scan after 250 ms, without consuming failure retries.
-- Retryable failures release equipment and allow one retry after three seconds.
-  Non-retryable or exhausted failures record the causal step, fail the run and
-  mark unstarted tasks skipped. Late results remain recorded; other runs continue.
-- Attempt IDs correlate results; transactional, append-only events retain history.
-  Stale results are ignored. Unversioned results are accepted only on the first
-  offer for compatibility with the supplied concurrency test.
-- An acknowledgement timeout fails the run but retains the instrument reservation
-  until a result arrives: acceptance is unknown, so resending could duplicate work.
+</details>
 
-## Scope and weaknesses
+![Implemented scheduler: dependency scanning, instrument claims and result handling](docs/design/scheduler-architecture.png)
 
-I chose reported-failure handling over missing-result recovery to deliver one
-bounded extension. Distributed scheduling and automatic restart recovery were
-omitted to focus on one executor process.
+Incubation can overlap liquid handling; fill tasks take turns. Combining waits
+for all three prerequisite branches.
 
-The main weakness is a crash between the database claim and command delivery.
-Production handling needs reconciliation and driver-side deduplication before
-safe replay; attempt IDs alone do not provide that. Scheduling is not fair or
-optimal.
+## Components, decisions and tradeoffs
 
-If a completion result is lost, the current scheduler waits indefinitely and
-retains the instrument reservation. Production recovery would reconcile
-instrument and experiment state before resuming; an unresolved outcome would
-require abandoning the run and confirming a safe reset.
+| Component | Decision and reason | Tradeoff |
+| --- | --- | --- |
+| Dependency scan | Scan pending tasks against completed prerequisites; fewer consistency rules than counters. | O(V + E) per active run on each scan; ordering is simple, not fair or optimal. |
+| Dispatch coordination | One lock serialises result handling and task/instrument claims across runs. Physical execution remains concurrent. | Slow database operations or acknowledgements delay scheduling decisions. |
+| Busy handling | Undo a refused claim and rescan after 250 ms, even without another result. | Repeated polling while busy; refusals do not consume failure retries. |
+| Failure handling | Honour `retryable`: release equipment, wait three seconds, retry once. This delivers one bounded extension. | Non-retryable or exhausted failures stop the whole run, including independent unstarted branches. |
+| State and history | Atomically record outcomes, the causal failure and skipped work; preserve late results without reviving failed runs. Attempt IDs reject stale results. | Unversioned results are accepted only on the first offer for supplied-test compatibility. |
+
+## Operational boundaries
+
+An acknowledgement timeout fails the run but retains the instrument reservation
+until a result arrives: acceptance is unknown. A missing completion result leaves
+the task in flight indefinitely with its reservation. Neither case triggers blind
+replay; an unknown physical outcome needs confirmation before recovery.
+
+The main weakness is a process crash between database claim and command delivery.
+The scheduler operates in one process and does not resume stored runs on restart;
+those cases need reconciliation. Attempt IDs correlate results, not deduplicate
+commands at the driver.
 
 ## Verification
 
-Both workflows passed 5/5 acceptance checks; all 12 pytest tests, the persistent
-failure check and lint passed. Four concurrent runs completed 26 tasks after four
-injected transient failures and successful retries. Pytest uses a separate database.
+- Both workflows: **5/5 acceptance checks**; **12 pytest tests**, persistent-failure
+  check and lint passed. Pytest uses a separate database.
+- Four concurrent runs: **26 tasks completed**, with four injected transient
+  failures and four successful retries.
 
 ## Exercise feedback
 
-- I really enjoyed the exercise: the lab workflow was fascinating,
-  and the problem statement was clear.
-- As a visual thinker, I built a disposable dashboard inspired by GitHub Actions
-  to understand the flow. That made the mental model click and was worth the time.
-- Docker and a real PostgreSQL database made setup straightforward; I appreciated
-  not having to guess how much infrastructure to build.
-- My only suggested change is to include a basic visualisation in the starter pack.
+- I really enjoyed the realistic lab workflow; the problem statement was clear.
+- As a visual thinker, the GitHub Actions-inspired visualiser made the flow click
+  and was worth the time.
+- Docker and real PostgreSQL removed uncertainty about infrastructure scope.
+- My only suggested change: include a basic visualisation in the starter pack.

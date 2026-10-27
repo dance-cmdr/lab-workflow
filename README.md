@@ -386,8 +386,18 @@ use the separate test database described above.
 
 ## Optional workflow observer
 
-For a visual view of all runs sharing equipment, start
-`python3 tools/queue-viewer/server.py` after the Docker stack, then open
-http://localhost:5010. It polls read-only APIs and shows dependencies, task states,
-individual attempt outcomes and retry gaps. Browser-only simulation is separately
-labelled. See [observer instructions](tools/queue-viewer/README.md).
+From the repository root, start the services and then the read-only visualiser:
+
+```sh
+docker compose up -d --build
+python3 tools/queue-viewer/server.py
+```
+
+Open **http://localhost:5010** and select **Live → All runs** to watch shared
+instruments, task states and retries. Stop the visualiser with **Ctrl+C**;
+the Docker services keep running.
+
+The visualiser does not start experiments. To create a live run in another
+terminal, use `./scripts/acceptance.sh` (or the API). **Simulation** animates loaded
+workflows in the browser without sending commands. See the
+[visualiser guide](tools/queue-viewer/README.md) for controls and interpretation.

@@ -1,7 +1,8 @@
 # Workflow observer (optional)
 
-A local, read-only dashboard used to understand dependencies, equipment contention
-and failure handling. It is independent of the executor and is not needed for tests.
+**How it works:** polls the executor’s read-only APIs every two seconds and renders task states, dependencies and attempt history across shared instruments.
+
+**Why I created it:** I think visually, so I built a GitHub Actions-inspired view to understand the workflow and see where tasks wait or retry.
 
 ## Start
 
