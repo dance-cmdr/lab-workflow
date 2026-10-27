@@ -44,14 +44,19 @@ for all three prerequisite branches.
 
 ## Components, decisions and tradeoffs
 
-| Component | Choice over alternative | Tradeoff |
-| --- | --- | --- |
-| Dependencies | Scan pending tasks rather than maintain Kahn’s dependency counters: fewer consistency rules. | O(V + E) per active run per scan; ordering is simple, not fair or optimal. |
-| Coordination | Hold one scheduler lock through claims and acknowledgements rather than release it before sending: simpler state transitions. | Simultaneous results cannot double-dispatch; slow I/O delays scheduling, not physical execution. |
-| Busy handling | Rescan after 250 ms rather than wait only for another result: refused work cannot be stranded. | Repeated polling while busy; refusals do not consume retries. |
-| Retries | Retry explicitly retryable failures once after three seconds rather than fail immediately. | Handles transient errors while bounding repeated work; equipment is released during backoff. |
-| Final failure | Stop new work across the run rather than continue unaffected branches. | Independent work is skipped; already-dispatched outcomes remain recorded and other runs continue. |
-| History | Preserve attempt events rather than overwrite each outcome with the latest state. | Extra records retain errors and the causal failure; attempt IDs reject stale results. |
+| Component | Choice over alternative | What we gain | What we pay |
+| --- | --- | --- | --- |
+| Dependencies | Scan tasks instead of maintaining Kahn’s counters. | Less derived state to keep consistent. | Recheck every active graph after events instead of updating only the completed task’s dependants; more CPU work and database reads as runs grow. |
+| Coordination | Keep one lock through acknowledgement instead of releasing it after reservation. | Fewer interleavings to reason about during dispatch. | A slow acknowledgement blocks scheduling decisions for every run, even on unrelated instruments. |
+| Busy handling | Poll after refusal instead of relying only on completion events. | Refused work progresses even if no further result arrives. | Extra scans while busy and up to 250 ms before noticing availability, plus scheduling time. |
+| Retries | Allow one safe retry instead of failing immediately. | Recover from transient errors. | More execution time and instrument capacity spent repeating work; a permanent fault takes longer to report as final. |
+| Final failure | Stop the run instead of continuing independent branches. | Avoid spending resources on an experiment that cannot complete. | Give up potentially useful partial results from branches that could still succeed. |
+| History | Append attempt events instead of keeping only the latest outcome. | Explain failures and retries after state changes. | More database writes, storage and event-handling logic. |
+
+For V tasks and E dependencies, scanning costs O(V + E) **each time**. Kahn’s
+counters do O(V + E) dependency bookkeeping **across one successful traversal**;
+that does not include instrument scheduling or database I/O. Simplicity here costs
+repeated work, rather than offering the same efficiency.
 
 ## Operational boundaries
 
