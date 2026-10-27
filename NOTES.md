@@ -65,6 +65,8 @@ states and attempt history are now implemented.*
 - Both supplied workflows: **5/5 acceptance checks passed**.
 - Pytest: **12 passed**, covering concurrency, refusals, shared equipment, bounded
   retries, stale results, skipped work, late results and driver attempt-ID echoing.
+- Four concurrent live runs completed all 26 tasks after four injected transient
+  failures and four successful retries, using a separate demonstration driver.
 - Live failure check and lint passed; drivers restored to normal.
 - Pytest now uses separate PostgreSQL storage. Live acceptance runs use the real
   executor and drivers. Driver acceptance history resets on restart.
