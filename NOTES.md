@@ -1,9 +1,8 @@
 # Study and implementation notes
 
-Draft checkpoint. Total time still needs reconciling across setup, study,
-implementation, testing and the optional visualisation. AI assisted the study,
-design, implementation and verification. Final time accounting and reflection
-are unfinished.
+Time spent: under two hours on the assessment, plus approximately 30 minutes on
+an optional visualisation. AI assisted the study, design, implementation and
+verification.
 
 ## Study first
 
@@ -21,8 +20,9 @@ commands: the default workflow stayed at one ready task and six waiting tasks.
 
 ![Workflow before implementation: one ready task, six waiting](docs/design/starter-workflow-observation.png)
 
-*Historical read-only observer, kept outside the submission. “Stage” means
-dependency depth, not scheduled time.*
+*Historical observer snapshot. “Stage” means dependency depth, not scheduled
+time. The optional [observer](tools/queue-viewer/README.md) is included separately
+from the executor.*
 
 ## Decomposition and decisions
 
@@ -85,4 +85,6 @@ require abandoning the run and confirming a safe reset.
 Start order and alphabetical task order are deterministic, not fair or optimal.
 The seven-step workflow completed in approximately 12 seconds.
 
-Next: finalise actual time spent and exercise feedback before submission.
+## Exercise feedback
+
+Personal feedback to be added before submission.

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Automata · local workflow observer</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+<main>
+  <header class="page-header"><div><div class="brand-lockup"><img src="/assets/automata-logo.svg" alt="Automata" width="172" height="32"><span>LOCAL OBSERVER</span></div><p class="eyebrow">LAB AUTOMATION / WORKFLOW VISIBILITY</p><h1>Workflow control room<span class="title-dot">.</span></h1><p class="sub">Follow each task. Find the wait. See what runs next.</p></div><div class="connection"><span id="connection">Connecting…</span><small id="updated">Waiting for the API</small></div></header>
+  <section class="toolbar unified-controls" aria-label="Run filter and playback controls">
+    <label class="filter-label">View <select id="run" aria-label="Choose run"><option value="all">All runs</option></select></label>
+    <label class="mode-label">Mode <select id="mode" aria-label="Data mode"><option value="live">Live</option><option value="simulation">Simulation</option></select></label>
+    <button id="play" type="button">Pause</button><button id="restart" type="button" disabled>Restart</button><span id="run-status" class="badge" hidden>—</span>
+    <details class="view-settings"><summary>View settings</summary><div><label class="threshold-control">No-progress threshold <select id="threshold"><option value="10">10 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option></select></label><label class="follow-control"><input id="follow" type="checkbox" checked> Follow active task</label></div></details>
+    <p id="filter-context" class="controls-hint">All runs share the same instruments. Filtering changes the view, not execution.</p>
+  </section>
+  <fieldset id="simulation-options" hidden><legend>Simulation scenarios</legend><label><input type="checkbox" id="sim-errors"> Inject errors</label><label><input type="checkbox" id="sim-retries"> Allow one safe retry</label><p>First incubation in each experiment fails once. Retries wait 3 seconds and release the instrument. Changing a toggle restarts paused.</p></fieldset>
+  <div id="simulation-banner" class="notice demo-notice" aria-live="polite" hidden></div>
+  <p id="error" role="alert" hidden></p>
+  <p id="count-scope" class="count-scope">All runs</p>
+  <section class="stats" aria-label="All run counts">
+    <div><strong id="total">—</strong><span>Total tasks</span></div>
+    <div><strong id="sent">—</strong><span>Tasks sent <small id="attempts"></small></span></div>
+    <div><strong id="executed">—</strong><span><span id="execution-label">Executions since driver restart</span> <small id="execution-source">Accepted commands · history resets per driver</small></span></div>
+    <div><strong id="done">—</strong><span>Completed</span></div>
+  </section>
+  <section aria-labelledby="instruments-title"><div class="section-heading"><h2 id="instruments-title">Instrument status</h2><span id="instrument-source">Live availability · across all runs</span></div><div id="instruments" class="instruments"></div></section>
+  <section class="shared-section" aria-labelledby="shared-title">
+    <div class="section-heading"><div><h2 id="shared-title">Shared instrument timeline</h2><p class="sub" id="shared-summary">Loading all runs…</p></div><span class="badge" id="shared-mode">ALL RUNS · LIVE</span></div>
+    <div id="run-legend" class="run-legend" aria-label="Run labels"></div>
+    <div class="timeline-key"><span><i class="sample solid"></i>Recorded dispatch → result</span><span><i class="sample dashed"></i>Conditional forecast</span><span>Amber: ready / competing</span><span>Grey stripes: awaiting dependencies</span></div>
+    <p class="projection-note">Forecast only: 2 seconds per task, earliest available slot, older runs first on ties. Assumes successful completion, no retries, and 2 seconds remaining for in-flight tasks. It is not the scheduler’s plan.</p>
+    <div class="timeline-scroll" tabindex="0" role="region" aria-label="All runs across instruments, recorded past and conditional future"><div id="shared-timeline"></div></div>
+    <div id="timeline-detail" class="pipeline-detail" aria-live="polite">Select a task to inspect its run, state and resource contention.</div>
+    <div id="unplanned" class="unplanned" hidden></div>
+    <p id="timeline-footnote" class="graph-hint">Live attempts: last 60 seconds. Future slots are conditional; waiting tasks do not reserve equipment.</p>
+  </section>
+  <section aria-labelledby="pipeline-title" class="pipeline-section" id="pipeline-section" hidden>
+    <div class="section-heading"><div><h2 id="pipeline-title">Workflow dependencies</h2><p class="sub">Dependencies + current task state. Columns show dependency depth, not scheduled start times.</p></div></div>
+    <div id="notice" class="notice" aria-live="polite">Loading live state…</div>
+    <div class="pipeline-key"><span data-state="waiting">○ Waiting</span><span data-state="ready">◉ Ready</span><span data-state="active">◌ In flight</span><span data-state="completed">✓ Completed</span><span data-state="stopped">× Stopped</span><span id="graph-mode">LIVE DATA</span></div>
+    <p id="demo-caption" class="demo-caption" hidden>DEMO · Simulated execution of this workflow. No commands are sent to instruments.</p>
+    <div class="graph-scroll" role="region" aria-label="Workflow dependency graph; scroll horizontally to follow the pipeline" tabindex="0"><div id="pipeline"></div></div>
+    <div id="pipeline-detail" class="pipeline-detail" aria-live="polite">Select a task to see what it is waiting for.</div>
+    <div class="graph-bottom"><p class="graph-hint">Same column does not mean simultaneous: tasks sharing an instrument take turns. Scroll sideways to explore.</p></div>
+  </section>
+  <section aria-labelledby="queue-title" id="queue-section" hidden><div class="section-heading"><h2 id="queue-title">Task queue</h2><span id="run-meta">Selected run</span></div>
+    <div class="board" id="board"></div>
+  </section>
+  <details id="simulation-history" class="activity" hidden open><summary>Simulated attempt history</summary><p class="sub">All experiments · every completed attempt, including failures and retries.</p><ol id="sim-events"></ol></details>
+  <details id="all-queue" class="all-queue">
+    <summary><span><strong>All experiments task queue</strong><small>Unfiltered · all experiment runs</small></span><span id="all-queue-count">Loading…</span></summary>
+    <p id="all-queue-context" class="sub">Includes every experiment, regardless of the run filter above.</p>
+    <div class="board" id="all-board" aria-label="Unfiltered task queue for all experiments"></div>
+  </details>
+  <details class="activity" id="activity" hidden><summary>Observed changes <span id="event-count">0</span></summary><p class="sub">Changes seen while this page is open. Very fast intermediate states may fall between polls.</p><ol id="events"><li>No changes observed yet.</li></ol></details>
+  <footer><a class="brand-source" href="https://www.automata.tech/linq/cloud" target="_blank" rel="noreferrer">Automata visual identity · personal assessment tool</a><span id="footer-source">Read-only · polls every 2 seconds · independent of executor</span><span>Ready = dependencies completed. No progress ≠ confirmed failure.</span></footer>
+</main>
+</body>
+</html>

@@ -383,3 +383,11 @@ docker compose up -d --build executor liquid-handler-1 incubator-1 plate-reader-
 Rebuild all drivers because they now echo attempt identifiers. Existing run data
 is preserved; earlier executions have no reconstructed attempt history. Tests
 use the separate test database described above.
+
+## Optional workflow observer
+
+For a visual view of all runs sharing equipment, start
+`python3 tools/queue-viewer/server.py` after the Docker stack, then open
+http://localhost:5010. It polls read-only APIs and shows dependencies, task states,
+individual attempt outcomes and retry gaps. Browser-only simulation is separately
+labelled. See [observer instructions](tools/queue-viewer/README.md).
