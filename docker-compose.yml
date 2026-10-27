@@ -112,6 +112,25 @@ services:
 
   # Runs the tests. Not started by `docker compose up`.
   #   docker compose run --rm tests
+  test-postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: lab_admin
+      POSTGRES_PASSWORD: lab_password
+      POSTGRES_DB: lab_default
+    # Separate server, no host port and no production data volume.
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lab_admin -d executor_db"]
+      interval: 1s
+      timeout: 5s
+      retries: 20
+    networks: [lab-network]
+    profiles: [tools]
+
   tests:
     build:
       context: .
@@ -126,10 +145,10 @@ services:
       # PYTHONPATH puts the mounted source ahead of the copy installed in the
       # image, so edits to scheduler.py are picked up without a rebuild.
       - PYTHONPATH=/src
-      - DATABASE_URL=postgresql://lab_admin:lab_password@postgres:5432/executor_db?sslmode=disable
+      - DATABASE_URL=postgresql://lab_admin:lab_password@test-postgres:5432/executor_db?sslmode=disable
       - WORKFLOWS_FILE=/src/config/workflows.yaml
     depends_on:
-      postgres:
+      test-postgres:
         condition: service_healthy
     networks: [lab-network]
     profiles: [tools]

@@ -8,6 +8,7 @@ from .models import (
     RUN_PENDING,
     RUN_RUNNING,
     STEP_DISPATCHED,
+    STEP_PENDING,
     Device,
     Run,
     Step,
@@ -115,6 +116,24 @@ class Store:
                 "       updated_at = now()"
                 " WHERE id = %s",
                 (STEP_DISPATCHED, step_id),
+            )
+
+    async def record_step_refused(self, step_id: str) -> None:
+        """Undo a claim only when the driver explicitly says nothing started."""
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                "UPDATE steps SET status = %s, dispatch_count = dispatch_count - 1,"
+                " dispatched_at = NULL, updated_at = now()"
+                " WHERE id = %s AND status = %s",
+                (STEP_PENDING, step_id, STEP_DISPATCHED),
+            )
+
+    async def record_dispatch_error(self, step_id: str, error: str) -> None:
+        """Keep an uncertain command in flight, with its diagnostic attached."""
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                "UPDATE steps SET error = %s, updated_at = now() WHERE id = %s",
+                (error, step_id),
             )
 
     async def record_step_finished(self, step_id: str, status: str, error: str = "") -> None:

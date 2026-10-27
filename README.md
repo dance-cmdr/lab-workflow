@@ -348,3 +348,7 @@ curl -sf -X POST "localhost:5001/runs/$run_id/start"
 ## Questions
 
 Ask at any point.
+
+## Automated test isolation
+
+`docker compose run --rm tests` uses its own `test-postgres` server, with no host port or production data volume. The shared init script seeds an independent database there. Its data lives in tmpfs and resets when that container is recreated. API/acceptance checks still use the actual executor and instruments, so their runs legitimately appear in the live observer. To discard test database state, run `docker compose rm -sf test-postgres` and run the tests again.

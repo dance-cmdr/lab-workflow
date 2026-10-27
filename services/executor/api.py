@@ -65,6 +65,7 @@ def create_app(*, database_url: str, nats_url: str, workflows_file: str) -> Fast
         try:
             yield
         finally:
+            await scheduler.close()
             await bus.close()
             await pool.close()
 
