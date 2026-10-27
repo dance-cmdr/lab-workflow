@@ -352,3 +352,34 @@ Ask at any point.
 ## Automated test isolation
 
 `docker compose run --rm tests` uses its own `test-postgres` server, with no host port or production data volume. The shared init script seeds an independent database there. Its data lives in tmpfs and resets when that container is recreated. API/acceptance checks still use the actual executor and instruments, so their runs legitimately appear in the live observer. To discard test database state, run `docker compose rm -sf test-postgres` and run the tests again.
+
+## Failure-handling extension
+
+The executor retries a reported failure once when the driver marks it retryable.
+A three-second delay releases the instrument for other tasks. Non-retryable or
+exhausted failures atomically record the causal `failed_step_id`, fail the run,
+and mark unstarted tasks `skipped`. Already dispatched work can still report its
+outcome. Missing-result recovery remains unimplemented.
+
+`GET /runs/{id}` now includes `attempts`: one identifier per command offer, with
+append-only `offered`, `accepted`, `refused`, `failed`, `retry_scheduled`,
+`completed` or `unknown` events. An offer number includes refusals; refusals do
+not consume the one-failure retry allowance or increment the final dispatch
+count. Commands/results carry `attempt_id`, so stale results cannot complete a
+newer attempt. This is result correlation, not driver-side command deduplication.
+Unversioned results are accepted only on a task's first offer for compatibility
+with the supplied concurrency test. The aggregate timeline still spans the
+logical task; use attempt events for individual dispatches and outcomes.
+
+Fresh databases receive the schema automatically. For an existing installation,
+wait for instruments to be idle, stop the executor, and apply the additive migration:
+
+```sh
+docker compose stop executor
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U lab_admin -d executor_db < db/schema/attempts.sql
+docker compose up -d --build executor liquid-handler-1 incubator-1 plate-reader-1
+```
+
+Rebuild all drivers because they now echo attempt identifiers. Existing run data
+is preserved; earlier executions have no reconstructed attempt history. Tests
+use the separate test database described above.

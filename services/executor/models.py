@@ -12,6 +12,7 @@ STEP_DISPATCHED = "dispatched"
 STEP_RUNNING = "running"
 STEP_COMPLETED = "completed"
 STEP_FAILED = "failed"
+STEP_SKIPPED = "skipped"
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class Run:
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    failed_step_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,3 +45,5 @@ class Step:
     dispatched_at: datetime | None
     finished_at: datetime | None
     error: str | None
+    current_attempt_id: str | None = None
+    retry_after: datetime | None = None

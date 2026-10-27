@@ -150,7 +150,7 @@ def create_app(*, database_url: str, nats_url: str, workflows_file: str) -> Fast
         store: Store = request.app.state.store
         run: Run = await store.get_run(run_id)
         steps: list[Step] = await store.list_steps(run.id)
-        return {"run": run, "steps": steps}
+        return {"run": run, "steps": steps, "attempts": await store.list_attempts(run.id)}
 
     @app.post("/runs/{run_id}/start")
     async def start_run(request: Request, run_id: str) -> Any:

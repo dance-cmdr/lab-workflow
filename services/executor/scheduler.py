@@ -1,15 +1,14 @@
 import asyncio
 import logging
 from contextlib import suppress
+from datetime import UTC, datetime
 
 from .bus import Bus, BusError, StepCommand, StepResult
 from .models import (
     RUN_COMPLETED,
-    RUN_FAILED,
     RUN_RUNNING,
     STEP_COMPLETED,
     STEP_DISPATCHED,
-    STEP_FAILED,
     STEP_PENDING,
     STEP_RUNNING,
 )
@@ -28,6 +27,8 @@ class Scheduler:
     """
 
     REFUSAL_DELAY = 0.25
+    RETRY_DELAY = 3.0
+    MAX_RETRIES = 1
 
     def __init__(self, store: Store, bus: Bus) -> None:
         self.store = store
@@ -48,7 +49,7 @@ class Scheduler:
             for step in await self.store.list_steps(run_id):
                 if step.status in (STEP_DISPATCHED, STEP_RUNNING):
                     self._occupied[step.device_id] = step.id
-            await self._schedule()
+            await self._rescan()
 
     async def handle_result(self, result: StepResult) -> None:
         async with self._lock:
@@ -62,22 +63,30 @@ class Scheduler:
             ):
                 log.warning("ignoring duplicate or unmatched result: %s", result)
                 return
-            await self.store.record_step_finished(
-                step.id, STEP_FAILED if result.error else STEP_COMPLETED, result.error
+            state = await self.store.record_result(
+                result,
+                max_retries=self.MAX_RETRIES,
+                retry_delay=self.RETRY_DELAY,
             )
+            if state is None:
+                log.warning("ignoring stale attempt result: %s", result)
+                return
             if self._occupied.get(step.device_id) == step.id:
                 del self._occupied[step.device_id]
-            run = await self.store.get_run(result.run_id)
-            if result.error and run.status == RUN_RUNNING:
-                await self.store.finish_run(run.id, RUN_FAILED)
-                self._runs.pop(run.id, None)
-                log.error("run %s failed at %s: %s", run.id, step.name, result.error)
-            # Record late successes, but never revive a run another task failed.
-            await self._schedule()
+            if result.error:
+                log.warning(
+                    "attempt %s failed for %s: %s (next state: %s)",
+                    result.attempt_id,
+                    step.name,
+                    result.error,
+                    state,
+                )
+            # A late result is recorded even after the run fails; it never revives it.
+            await self._rescan()
 
-    async def _schedule(self) -> None:
+    async def _schedule(self) -> bool:
         """Called only with the global lock held; scan each active run once."""
-        refused = False
+        needs_wakeup = False
         for run_id in list(self._runs):
             run = await self.store.get_run(run_id)
             if run.status != RUN_RUNNING:
@@ -92,47 +101,60 @@ class Scheduler:
             completed = {s.name for s in steps if s.status == STEP_COMPLETED}
             for step in steps:
                 if (
+                    step.status == STEP_PENDING
+                    and step.retry_after is not None
+                    and step.retry_after > datetime.now(UTC)
+                ):
+                    needs_wakeup = True
+                    continue
+                if (
                     step.status != STEP_PENDING
                     or not completed.issuperset(step.depends_on)
                     or step.device_id in self._occupied
                 ):
                     continue
                 # Claim before sending; the global lock also protects the slot.
-                await self.store.record_step_dispatched(step.id)
+                attempt_id = await self.store.claim_step(step.id)
+                if attempt_id is None:
+                    needs_wakeup = True
+                    continue
                 self._occupied[step.device_id] = step.id
                 try:
                     ack = await self.bus.send_command(
-                        StepCommand(run_id, step.id, step.name, step.device_id)
+                        StepCommand(run_id, step.id, step.name, step.device_id, attempt_id)
                     )
                 except BusError as exc:
                     # Timeout is not refusal: the driver may have taken the work.
                     # Fail closed; keep its slot and never repeat the command.
-                    await self.store.record_dispatch_error(step.id, str(exc))
-                    await self.store.finish_run(run_id, RUN_FAILED)
+                    await self.store.record_dispatch_error(step.id, attempt_id, str(exc))
                     self._runs.pop(run_id, None)
                     log.error("command outcome unknown for %s: %s", step.id, exc)
                     break
+                await self.store.record_ack(step.id, attempt_id, ack.accepted, ack.reason)
                 if not ack.accepted:
-                    await self.store.record_step_refused(step.id)
                     del self._occupied[step.device_id]
-                    refused = True
+                    needs_wakeup = True
                     log.info("driver refused %s: %s", step.id, ack.reason)
                 else:
                     log.info("dispatched %s on %s (run %s)", step.name, step.device_id, run_id)
-        if refused and (self._retry_task is None or self._retry_task.done()):
-            self._retry_task = asyncio.create_task(self._retry_refusals())
+        return needs_wakeup
 
-    async def _retry_refusals(self) -> None:
+    async def _rescan(self) -> None:
+        if await self._schedule() and (self._retry_task is None or self._retry_task.done()):
+            self._retry_task = asyncio.create_task(self._wake_pending())
+
+    async def _wake_pending(self) -> None:
+        """A retained timer handles refusal and retry backoff without needing a result."""
         try:
-            await asyncio.sleep(self.REFUSAL_DELAY)
-            async with self._lock:
-                # Let a further refusal arrange the next wakeup.
-                self._retry_task = None
-                await self._schedule()
+            while True:
+                await asyncio.sleep(self.REFUSAL_DELAY)
+                async with self._lock:
+                    if not await self._schedule():
+                        return
         except asyncio.CancelledError:
             raise
         except Exception:
-            log.exception("refusal retry failed")
+            log.exception("pending-work wakeup failed")
 
     async def close(self) -> None:
         if self._retry_task is not None:

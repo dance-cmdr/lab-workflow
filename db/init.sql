@@ -28,7 +28,7 @@ CREATE TABLE runs (
 
 -- One node of the workflow DAG, for one run.
 -- depends_on holds the names of steps in the same run that must finish first.
--- status: pending | dispatched | running | completed | failed
+-- status: pending | dispatched | running | completed | failed | skipped
 CREATE TABLE steps (
     id            TEXT PRIMARY KEY,
     run_id        TEXT        NOT NULL REFERENCES runs(id),
@@ -51,3 +51,6 @@ INSERT INTO devices (id, name, type) VALUES
     ('liquid-handler-1', 'Liquid Handler 1', 'liquid_handler'),
     ('incubator-1',      'Incubator 1',      'incubator'),
     ('plate-reader-1',   'Plate Reader 1',   'plate_reader');
+
+-- psql resolves this relative to init.sql for both live and test databases.
+\ir schema/attempts.sql

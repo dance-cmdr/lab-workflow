@@ -43,6 +43,7 @@ class StepCommand:
     step_id: str
     step_name: str
     device_id: str
+    attempt_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class StepResult:
     device_id: str
     error: str = ""
     retryable: bool = False
+    attempt_id: str | None = None
 
 
 @dataclass
@@ -111,6 +113,7 @@ class Driver:
                 step_id=data["step_id"],
                 step_name=data["step_name"],
                 device_id=data["device_id"],
+                attempt_id=data.get("attempt_id"),
             )
         except (json.JSONDecodeError, KeyError, TypeError):
             await self.reply(msg, CommandAck(accepted=False, reason="malformed command"))
@@ -149,9 +152,7 @@ class Driver:
             error = f"instrument error during {cmd.step_name}"
             retryable = self.failures_retryable
             self.state.failed += 1
-            log.info(
-                "FAILED %s -- reporting an error (retryable=%s)", cmd.step_name, retryable
-            )
+            log.info("FAILED %s -- reporting an error (retryable=%s)", cmd.step_name, retryable)
 
         # The instrument has finished, one way or the other. Whether anyone hears
         # about it is a separate question -- see DROP_RESULT_PCT.
@@ -170,6 +171,7 @@ class Driver:
             device_id=cmd.device_id,
             error=error,
             retryable=retryable,
+            attempt_id=cmd.attempt_id,
         )
         try:
             await self.nc.publish(SUBJECT_RESULT, json.dumps(asdict(result)).encode())

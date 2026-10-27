@@ -38,6 +38,7 @@ class StepCommand:
     step_id: str
     step_name: str
     device_id: str
+    attempt_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ class StepResult:
     device_id: str
     error: str = ""
     retryable: bool = False
+    attempt_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +161,7 @@ class NATSBus:
                     device_id=data["device_id"],
                     error=data.get("error") or "",
                     retryable=bool(data.get("retryable", False)),
+                    attempt_id=data.get("attempt_id"),
                 )
             except (json.JSONDecodeError, KeyError, TypeError) as exc:
                 log.error("bus: bad result payload %r: %s", msg.data, exc)
