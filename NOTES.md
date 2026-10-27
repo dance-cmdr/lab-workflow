@@ -67,20 +67,12 @@ attempt history were discussed; they are not all implemented.*
 
 One executor process; no automatic restart recovery, distributed coordination or
 atomic database/message delivery. Crashes between claim and send, or between
-step failure and run failure, need reconciliation. A dropped result leaves the
-run waiting and the instrument reserved indefinitely. Recovery must establish
-what physically happened; a timeout alone cannot justify repeating work.
+step failure and run failure, need reconciliation.
 
-**Production recovery proposal — not implemented:** for an overdue result, check
-instrument heartbeat, current operation and command identity, then reconcile
-execution history with the last confirmed experiment/labware state. Use evidence
-from neighbouring tasks only when traceably linked to the same experiment;
-liveness or an idle instrument alone does not prove success. If the outcome
-remains unknown, abandon the run and start fresh only after confirming the old
-operation has stopped, equipment is safe, and fresh materials or a validated
-reset are available. Automatic restart assumes no outstanding cleaning or
-decontamination requirements. The supplied interfaces do not establish all of
-these conditions.
+If a completion result is lost, the current scheduler waits indefinitely and
+retains the instrument reservation. Production recovery would reconcile
+instrument and experiment state before resuming; an unresolved outcome would
+require abandoning the run and confirming a safe reset.
 
 Start order and alphabetical task order are deterministic, not fair or optimal.
 The seven-step workflow completed in approximately 12 seconds.
